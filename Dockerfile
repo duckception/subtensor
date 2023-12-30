@@ -1,43 +1,22 @@
+# Use the specified image as the base
+FROM opentensor/subtensor:latest
 
-ARG BASE_IMAGE=ubuntu:20.04
+# Set the environment variable
+ENV CARGO_HOME=/var/www/node-subtensor/.cargo
 
-FROM $BASE_IMAGE as builder
-SHELL ["/bin/bash", "-c"]
+# Set the working directory inside the container
+WORKDIR /var/www/node-subtensor
 
-# This is being set so that no interactive components are allowed when updating.
-ARG DEBIAN_FRONTEND=noninteractive
+# Copy necessary files
+# Note: You need to ensure that 'raw_spec.json' and any other necessary files are present in your context
+COPY ./raw_spec.json ./
 
-LABEL ai.opentensor.image.authors="operations@opentensor.ai" \
-        ai.opentensor.image.vendor="Opentensor Foundation" \
-        ai.opentensor.image.title="opentensor/subtensor" \
-        ai.opentensor.image.description="Opentensor Subtensor Blockchain" \
-        ai.opentensor.image.revision="${VCS_REF}" \
-        ai.opentensor.image.created="${BUILD_DATE}" \
-        ai.opentensor.image.documentation="https://docs.bittensor.com"
+# Expose the necessary ports
+EXPOSE 9944 30333 9933
 
-# show backtraces
-ENV RUST_BACKTRACE 1
+# Set resource limits (handled outside Dockerfile in the container runtime environment)
+# Note: Dockerfile does not have direct commands for cpu_count, mem_limit, or memswap_limit.
+# These should be set when running the container using 'docker run' options like --cpus, --memory, --memory-swap, etc.
 
-# Necessary libraries for Rust execution
-RUN apt-get update && apt-get install -y curl build-essential protobuf-compiler clang git
-
-# Install cargo and Rust
-RUN curl https://sh.rustup.rs -sSf | sh -s -- -y
-ENV PATH="/root/.cargo/bin:${PATH}"
-
-RUN mkdir -p /subtensor
-WORKDIR /subtensor
-COPY . .
-
-# Update to nightly toolchain
-RUN ./scripts/init.sh
-
-# Cargo build
-RUN cargo build --release --features runtime-benchmarks --locked
-EXPOSE 30333 9933 9944
-
-FROM $BASE_IMAGE
-COPY --from=builder /subtensor/snapshot.json /
-COPY --from=builder /subtensor/target/release/node-subtensor /
-COPY --from=builder /subtensor/raw_spec.json .
-
+# Command to run on container start
+CMD ["/bin/bash", "-c", "/node-subtensor --base-path /tmp/blockchain --chain ./raw_spec.json --rpc-external --rpc-cors all --ws-external --no-mdns --ws-max-connections 10000 --in-peers 500 --out-peers 500 --bootnodes /dns/bootnode.finney.opentensor.ai/tcp/30333/ws/p2p/12D3KooWRwbMb85RWnT8DSXSYMWQtuDwh4LJzndoRrTDotTR5gDC --sync warp"]
